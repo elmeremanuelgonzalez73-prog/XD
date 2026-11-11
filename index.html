@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anuncios Globales</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
+    body { background: #12141c; color: #fff; height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .app { width: 100%; max-width: 600px; height: 100vh; max-height: 800px; background: #1b1e28; display: flex; flex-direction: column; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+    .header { padding: 15px; background: #232735; text-align: center; font-weight: bold; border-bottom: 1px solid #333; font-size: 18px; color: #00ffff; }
+    #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+    .msg { padding: 10px 14px; border-radius: 8px; max-width: 85%; font-size: 14px; line-height: 1.4; word-wrap: break-word; }
+    .msg .meta { font-size: 11px; opacity: 0.6; margin-bottom: 4px; font-weight: bold;}
+    .admin { align-self: flex-start; background: #1e3a8a; border-left: 4px solid #00ffff; }
+    .system { align-self: center; background: transparent; color: #888; font-size: 12px; font-style: italic; text-align: center; max-width: 100%; }
+    
+    .composer { display: none; padding: 10px; background: #232735; border-top: 1px solid #333; gap: 8px; }
+    .composer.active { display: flex; }
+    input { flex: 1; padding: 12px; border-radius: 6px; border: none; background: #12141c; color: white; outline: none; font-size: 14px; }
+    button { padding: 12px 20px; background: #00ffff; color: #000; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; }
+    
+    #login-screen { display: flex; flex-direction: column; padding: 20px; gap: 15px; align-items: center; justify-content: center; flex: 1; }
+    #login-screen input { width: 100%; max-width: 300px; text-align: center; font-size: 16px; }
+    #login-screen button { width: 100%; max-width: 300px; }
+    .readonly-notice { color: #ffaa00; font-size: 12px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <div class="header">Tablón de Anuncios</div>
+
+  <!-- Pantalla de Login -->
+  <div id="login-screen">
+    <h2>Ingresa tu nombre</h2>
+    <p style="color:#aaa; font-size:13px; text-align:center;">El público puede leer. Solo el administrador puede escribir.</p>
+    <input id="userInput" type="text" placeholder="Tu nombre" maxlength="15" autocomplete="off">
+    <button onclick="joinChat()">Entrar</button>
+  </div>
+
+  <!-- Pantalla de Chat -->
+  <div id="chat-screen" style="display: none; flex-direction: column; height: 100%;">
+    <div id="messages"></div>
+    <div class="composer" id="composer">
+      <input id="msgInput" type="text" placeholder="Escribe un anuncio..." autocomplete="off">
+      <button onclick="sendMessage()">Enviar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  let username = "";
+  const ADMIN_NAME = "Robustcart";
+
+  function joinChat() {
+    username = document.getElementById('userInput').value.trim();
+    if (!username) {
+      alert("Por favor, escribe tu nombre.");
+      return;
+    }
+
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('chat-screen').style.display = 'flex';
+
+    // Si es el admin, mostrar la caja de texto
+    if (username === ADMIN_NAME) {
+      document.getElementById('composer').classList.add('active');
+      document.getElementById('msgInput').focus();
+    }
+
+    // Avisar al servidor
+    socket.emit('userJoined', username);
+  }
+
+  function sendMessage() {
+    if (username !== ADMIN_NAME) return; // Bloqueo extra en el cliente
+    
+    const input = document.getElementById('msgInput');
+    const text = input.value.trim();
+    if (text === '') return;
+
+    socket.emit('chatMessage', {
+      user: username,
+      text: text
+    });
+    input.value = '';
+  }
+
+  document.getElementById('msgInput').addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') sendMessage();
+  });
+  
+  document.getElementById('userInput').addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') joinChat();
+  });
+
+  // Cargar historial
+  socket.on('history', (history) => {
+    const messages = document.getElementById('messages');
+    messages.innerHTML = '';
+    history.forEach(data => addMessageToUI(data));
+  });
+
+  // Recibir mensajes nuevos
+  socket.on('message', (data) => {
+    addMessageToUI(data);
+  });
+
+  function addMessageToUI(data) {
+    const messages = document.getElementById('messages');
+    const div = document.createElement('div');
+    
+    if (data.user === 'Sistema') {
+      div.className = 'msg system';
+      div.textContent = data.text;
+    } else {
+      div.className = 'msg admin';
+      const safeUser = data.user.replace(/</g, "&lt;");
+      const safeText = data.text.replace(/</g, "&lt;");
+      div.innerHTML = `<div class="meta">📢 ${safeUser} · ${data.time}</div>${safeText}`;
+    }
+    
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight; 
+  }
+</script>
+</body>
+</html>
